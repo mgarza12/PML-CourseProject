@@ -159,7 +159,7 @@ names(tLC.1) &lt;- c(&quot;Training.set_size&quot;,&quot;variable&quot;,&quot;Ac
 #  for(j in 1:length(s.gamma))
 #  {
 #    mIJ &lt;- ksvm(classe ~.,data=train.set,kernel = &quot;rbfdot&quot;,kpar=list(sigma=s.gamma[j]),C=c.cost[i])
-#    phatIJ &lt;- predict(mIJ,valid.set)
+#    phatIJ &lt;- predict(mIJ,valid.set[,names(valid.set) != &quot;classe&quot;])
 #    aIJ &lt;- confusionMatrix(data = phatIJ,reference = valid.set$classe)
 #    sel.Rs[i,j] &lt;- aIJ$overall[1]
 #  }
@@ -167,13 +167,46 @@ names(tLC.1) &lt;- c(&quot;Training.set_size&quot;,&quot;variable&quot;,&quot;Ac
 
 #rm(i,j,mIJ,phatIJ,aIJ)
 #Ind &lt;- which(sel.Rs == max(sel.Rs),arr.ind = TRUE)</code></pre>
-<p>The values that give the best performance (<strong>cross-validation accuracy of 99.5%</strong>) are <code>C = 40.96</code> and <code>sigma=1/20</code>. These values are used to fit the final model, which will be the one used to make the predictions for the testing dataset.</p>
-<p><strong>NOTE:</strong> I am defining again the same subset of features but without <code>classe</code>, since the testing set does not have it.</p>
+<p>The values that give the best performance are <code>C = 40.96</code> and <code>sigma=1/20</code>. The model fitted with these values has the following <strong>performance</strong> metrics measured on the <strong>validation set</strong>:</p>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 1390    0    0    0    0
+##          B    2  948    4    0    0
+##          C    0    1  850    6    0
+##          D    0    0    0  796    1
+##          E    3    0    1    2  900
+## 
+## Overall Statistics
+##                                         
+##                Accuracy : 0.996         
+##                  95% CI : (0.994, 0.998)
+##     No Information Rate : 0.284         
+##     P-Value [Acc &gt; NIR] : &lt;2e-16        
+##                                         
+##                   Kappa : 0.995         
+##  Mcnemar's Test P-Value : NA            
+## 
+## Statistics by Class:
+## 
+##                      Class: A Class: B Class: C Class: D Class: E
+## Sensitivity             0.996    0.999    0.994    0.990    0.999
+## Specificity             1.000    0.998    0.998    1.000    0.999
+## Pos Pred Value          1.000    0.994    0.992    0.999    0.993
+## Neg Pred Value          0.999    1.000    0.999    0.998    1.000
+## Prevalence              0.284    0.194    0.174    0.164    0.184
+## Detection Rate          0.283    0.193    0.173    0.162    0.184
+## Detection Prevalence    0.283    0.195    0.175    0.163    0.185
+## Balanced Accuracy       0.998    0.999    0.996    0.995    0.999</code></pre>
+<p>It can be observed that the model’s performance –based on the validation dataset– has improved. Therefore, I will use <code>{C = 40.96, sigma=1/20}</code> to fit the final model, which will be the one used to make the predictions for the testing dataset.</p>
+<p><strong>NOTE:</strong> I am defining again the same subset of features but without <code>classe</code>, since the testing set does not contain it.</p>
 <pre class="r"><code>keep.var &lt;- c(&quot;user_name&quot;,&quot;raw_timestamp_part_1&quot;,&quot;raw_timestamp_part_2&quot;,&quot;num_window&quot;,&quot;roll_belt&quot;,&quot;pitch_belt&quot;,&quot;yaw_belt&quot;,&quot;total_accel_belt&quot;,&quot;gyros_belt_x&quot;,&quot;gyros_belt_y&quot;,&quot;gyros_belt_z&quot;,&quot;accel_belt_x&quot;,&quot;accel_belt_y&quot;,&quot;accel_belt_z&quot;,&quot;magnet_belt_x&quot;,&quot;magnet_belt_y&quot;,&quot;magnet_belt_z&quot;,&quot;roll_arm&quot;,&quot;pitch_arm&quot;,&quot;yaw_arm&quot;,&quot;total_accel_arm&quot;,&quot;gyros_arm_x&quot;,&quot;gyros_arm_y&quot;,&quot;gyros_arm_z&quot;,&quot;accel_arm_x&quot;,&quot;accel_arm_y&quot;,&quot;accel_arm_z&quot;,&quot;magnet_arm_x&quot;,&quot;magnet_arm_y&quot;,&quot;magnet_arm_z&quot;,&quot;roll_dumbbell&quot;,&quot;pitch_dumbbell&quot;,&quot;yaw_dumbbell&quot;,&quot;total_accel_dumbbell&quot;,&quot;gyros_dumbbell_x&quot;,&quot;gyros_dumbbell_y&quot;,&quot;gyros_dumbbell_z&quot;,&quot;accel_dumbbell_x&quot;,&quot;accel_dumbbell_y&quot;,&quot;accel_dumbbell_z&quot;,&quot;magnet_dumbbell_x&quot;,&quot;magnet_dumbbell_y&quot;,&quot;magnet_dumbbell_z&quot;,&quot;roll_forearm&quot;,&quot;pitch_forearm&quot;,&quot;yaw_forearm&quot;,&quot;total_accel_forearm&quot;,&quot;gyros_forearm_x&quot;,&quot;gyros_forearm_y&quot;,&quot;gyros_forearm_z&quot;,&quot;accel_forearm_x&quot;,&quot;accel_forearm_y&quot;,&quot;accel_forearm_z&quot;,&quot;magnet_forearm_x&quot;,&quot;magnet_forearm_y&quot;,&quot;magnet_forearm_z&quot;)
 final.model &lt;- ksvm(classe ~.,data=train.set[,c(keep.var,&quot;classe&quot;)],kernel = &quot;rbfdot&quot;,kpar=list(sigma=1/20),C=40.96)
 final.phat &lt;- predict(final.model,pml.testing[,keep.var])</code></pre>
 <p>Given that the ground truth is not available, I am not able to provide an estimate of accuracy or any other measure of performance for the <strong>testing set</strong>. Nonetheless, the procedure was correctly applied and I am confident that the results will be highly accurate.</p>
-<p><strong>REFERENCES.</strong> [1] Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers’ Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012.</p>
+<p><strong>REFERENCES.</strong></p>
+<p>[1] Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers’ Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012.</p>
 <p>[2] Kuhn, Max, and Kjell Johnson. Applied predictive modeling. New York: Springer, 2013.</p>
 
 

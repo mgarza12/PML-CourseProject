@@ -100,7 +100,7 @@ For reasons of space, I do not present the matrix of accuracy values. However, t
 #  for(j in 1:length(s.gamma))
 #  {
 #    mIJ <- ksvm(classe ~.,data=train.set,kernel = "rbfdot",kpar=list(sigma=s.gamma[j]),C=c.cost[i])
-#    phatIJ <- predict(mIJ,valid.set)
+#    phatIJ <- predict(mIJ,valid.set[,names(valid.set) != "classe"])
 #    aIJ <- confusionMatrix(data = phatIJ,reference = valid.set$classe)
 #    sel.Rs[i,j] <- aIJ$overall[1]
 #  }
@@ -110,9 +110,16 @@ For reasons of space, I do not present the matrix of accuracy values. However, t
 #Ind <- which(sel.Rs == max(sel.Rs),arr.ind = TRUE)
 ```
 
-The values that give the best performance (**cross-validation accuracy of 99.5%**) are `C = 40.96` and `sigma=1/20`. These values are used to fit the final model, which will be the one used to make the predictions for the testing dataset.
+The values that give the best performance are `C = 40.96` and `sigma=1/20`. The model fitted with these values has the following **performance** metrics measured on the **validation set**:
 
-**NOTE:** I am defining again the same subset of features but without `classe`, since the testing set does not have it.
+```{r,echo=FALSE}
+val.pred <- predict(ksvm(classe ~.,data=train.set,kernel = "rbfdot",kpar=list(sigma=1/20),C=40.96),valid.set[,names(valid.set) != "classe"])
+confusionMatrix(data = val.pred,reference = valid.set$classe)
+```
+
+It can be observed that the model's performance --based on the validation dataset-- has improved. Therefore, I will use `{C = 40.96, sigma=1/20}`  to fit the final model, which will be the one used to make the predictions for the testing dataset.
+
+**NOTE:** I am defining again the same subset of features but without `classe`, since the testing set does not contain it.
 
 ```{r}
 keep.var <- c("user_name","raw_timestamp_part_1","raw_timestamp_part_2","num_window","roll_belt","pitch_belt","yaw_belt","total_accel_belt","gyros_belt_x","gyros_belt_y","gyros_belt_z","accel_belt_x","accel_belt_y","accel_belt_z","magnet_belt_x","magnet_belt_y","magnet_belt_z","roll_arm","pitch_arm","yaw_arm","total_accel_arm","gyros_arm_x","gyros_arm_y","gyros_arm_z","accel_arm_x","accel_arm_y","accel_arm_z","magnet_arm_x","magnet_arm_y","magnet_arm_z","roll_dumbbell","pitch_dumbbell","yaw_dumbbell","total_accel_dumbbell","gyros_dumbbell_x","gyros_dumbbell_y","gyros_dumbbell_z","accel_dumbbell_x","accel_dumbbell_y","accel_dumbbell_z","magnet_dumbbell_x","magnet_dumbbell_y","magnet_dumbbell_z","roll_forearm","pitch_forearm","yaw_forearm","total_accel_forearm","gyros_forearm_x","gyros_forearm_y","gyros_forearm_z","accel_forearm_x","accel_forearm_y","accel_forearm_z","magnet_forearm_x","magnet_forearm_y","magnet_forearm_z")
@@ -123,6 +130,7 @@ final.phat <- predict(final.model,pml.testing[,keep.var])
 Given that the ground truth is not available, I am not able to provide an estimate of accuracy or any other measure of performance for the **testing set**. Nonetheless, the procedure was correctly applied and I am confident that the results will be highly accurate.
 
 **REFERENCES.**
+
 [1] Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. 
 
 [2] Kuhn, Max, and Kjell Johnson. Applied predictive modeling. New York: Springer, 2013.
