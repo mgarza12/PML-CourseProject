@@ -1,0 +1,128 @@
+---
+title: "Practical Machine Learning: Course Project"
+author: "Miguel Angel Valencia Garza"
+date: "22 August 2014"
+output: html_document
+---
+
+According to Kuhn and Johnson (2013), predictive modelling is the process of developing a mathematical tool or model that generates an accurate prediction. Precisely in this sense, the purpose of the course project is to develop a model that best predicts the exercise (sitting-down, standing-up, standing, walking and sitting) a subject is doing. I will apply predictive modelling to a dataset consisting of several measurements of a human activity recognition device that are closely related to the outcome of interest [1].
+
+The first thing is to load the training and test sets into the R environment. The training set will be split in order to have a validation set that will eventually help tune model's parameters. For the training set, 75% of the data is kept whilst the rest goes to the validation set. Note that, for reproducibility, I set the seed to **548**.
+
+```{r}
+library(caret)
+set.seed(548)
+pml.training <- read.csv("~/Documents/Coursera/Practical_MachineLearning/pml-training.csv")
+pml.testing <- read.csv("~/Documents/Coursera/Practical_MachineLearning/pml-testing.csv")
+inTrain <- createDataPartition(y=pml.training$classe,p = 0.75,list = FALSE)
+train.set <- pml.training[inTrain,]
+valid.set <- pml.training[-inTrain,]
+```
+
+After having the training set split, the next thing is to analyse the characteristics of the predictors. For this, I used R's `summary()` function. 
+
+I found that the features representing the summary statistics (i.e. kurtosis, skewness, maximum, minimum, average, variance and standard deviation) have around 98% blanks --or, equivalently, 2% of the observations have information. Additionally, features such as amplitude_yaw_forearm and amplitude_yaw_dumbbell also have 98% blanks and the observations that do have information are either 0 or a warning value of a undetermined operation (#DIV/0!). Since the aforementioned features only contribute with noise, I decided to drop such features. Despite this, little information was lost. The raw features have embedded the information from those containing the summary statistics: e.g. roll_belt contains the (raw) information found in kurtosis_roll_belt, skewness_roll_belt and the other summary statistics related to roll_belt.
+
+For the categorical features, I decided to drop cvtd_timestamp and keep the two features that conform it: raw_timestamp_part_1 and raw_timestamp_part_2. Also, I discarded new_window feature and kept num_window. In this case, the decision was more inclined towards keeping the number of predictors small. Even though it is likely that important information is lost by throwing away new_window; I am positive that some of this is still captured by num_window feature. Furthermore, if subsequent analysis indicate that the chosen model suffers from high bias, I can try and add this feature again to the set of predictors and see if it improves the performance. Thus, the selected features are the following:
+
+```{r}
+keep.var <- c("user_name","raw_timestamp_part_1","raw_timestamp_part_2","num_window","roll_belt","pitch_belt","yaw_belt","total_accel_belt","gyros_belt_x","gyros_belt_y","gyros_belt_z","accel_belt_x","accel_belt_y","accel_belt_z","magnet_belt_x","magnet_belt_y","magnet_belt_z","roll_arm","pitch_arm","yaw_arm","total_accel_arm","gyros_arm_x","gyros_arm_y","gyros_arm_z","accel_arm_x","accel_arm_y","accel_arm_z","magnet_arm_x","magnet_arm_y","magnet_arm_z","roll_dumbbell","pitch_dumbbell","yaw_dumbbell","total_accel_dumbbell","gyros_dumbbell_x","gyros_dumbbell_y","gyros_dumbbell_z","accel_dumbbell_x","accel_dumbbell_y","accel_dumbbell_z","magnet_dumbbell_x","magnet_dumbbell_y","magnet_dumbbell_z","roll_forearm","pitch_forearm","yaw_forearm","total_accel_forearm","gyros_forearm_x","gyros_forearm_y","gyros_forearm_z","accel_forearm_x","accel_forearm_y","accel_forearm_z","magnet_forearm_x","magnet_forearm_y","magnet_forearm_z","classe")
+train.set <- train.set[,keep.var]
+valid.set <- valid.set[,keep.var]
+```
+
+The next step is to train and evaluate a preliminary model. For classification, a model that works quite well is the support vector machine (SVM) with Gaussian kernel. In order to fit the model, I used the `ksvm()` function from the R package **kernlab**. The default value for the cost is 1 and I fixed an arbitrary value for sigma equal to 0.5.
+
+```{r}
+library(kernlab)
+m1 <- ksvm(classe ~.,data = train.set,kernel="rbfdot",kpar=list(sigma=0.5))
+phat1 <- predict(m1,newdata = valid.set)
+confusionMatrix(data = phat1,reference = valid.set$classe)
+```
+
+From the confusion matrix, it can be observed that the performance of the preliminary SVM is not bad. Hence, this is a good choice of model. Then, the next step is to explore the behaviour of the SVM under different training sample sizes. By doing this, one can diagnose high bias or high variance problems.
+
+With **high bias**, a low training set size will cause the accuracy on the training set to be high and low for the validation set. On the other hand, a large training set size would cause that both training and validation accuracies to be low and, actually, very close to each other. If the problem is **high variance**, a small training sample size would cause the training accuracy to be high and the validation one to be low. A large training sample size would make both training and validation accuracies increase, with `Accuracy_val <= Accuracy_train`.
+
+Once the potential problem of this model (high bias/variance) has been identified, it can be addressed properly.
+
+```{r}
+library(reshape2)
+LCurve <- function(tr.data,val.data)
+{
+  s1 <- seq(from = 0.05,to = 1,by = 0.01)
+  N1 <- length(s1)
+  LCtable <- matrix(0,N1,3)
+  
+  for(i in 1:N1)
+  {
+    PartD <- createDataPartition(y = tr.data$classe,p = s1[i],list = FALSE)
+    d1 <- tr.data[PartD,]
+    N2 <- nrow(d1)
+    t1 <- ksvm(classe ~.,data=d1,kernel = "rbfdot",kpar=list(sigma=0.5))
+    y2 <- predict(t1,newdata = val.data[,names(val.data) != "classe"])
+    a1 <- confusionMatrix(data = fitted(t1),reference = d1$classe)
+    a2 <- confusionMatrix(data = y2,reference = valid.set$classe)
+    LCtable[i,] <- c(N2,a1$overall[1],a2$overall[1])
+  }
+  
+  return(LCtable)
+}
+
+table.LC <- LCurve(tr.data = train.set,val.data = valid.set)
+table.LC <- as.data.frame(table.LC)
+names(table.LC) <- c("Training.set_size","Training.set","Validation.set")
+tLC.1 <- melt(table.LC,id="Training.set_size")
+names(tLC.1) <- c("Training.set_size","variable","Accuracy")
+```
+
+```{r}
+ggplot(data=tLC.1,aes(x=Training.set_size,y=Accuracy,colour=variable)) + geom_line()
+```
+
+From the graph, it can be observed that the model suffers from high variance; i.e. overfitting. An overfitting issue can be addressed by (1) getting more training examples or (2) having a smaller set of features. Since getting more training examples seems difficult, then I resort to the second option.
+
+Trying a smaller set of features is known as **model selection**. There are two main approaches to carry out this task, namely, (i) subset selection, which means completely dropping irrelevant features and (ii) shrinkage, which fits the model with the complete set of features and then shrinks the importance of certain features by setting their coefficients close to zero (or zero, depending on the type of shrinkage). For SVMs, the most natural way to proceed is the shrinkage approach.
+
+The parameter C from the `ksvm()` function controls the amount of regularisation (or shrinkage). However, varying solely C will not improve the performance or achieve the desired regularisation. Since I chose the Gaussian kernel for my model, this means that there is an extra parameter that ought to be tuned. Selecting the **right** pair of values {C,sigma} will give the desired result.
+
+In order to select the right pair of values I searched in a grid consisting of different pairs {C,sigma}. An SVM model is trained with each possible pair from this grid and its accuracy is measured using the validation set. The pair {C,sigma} that yields the highest accuracy will be the one chosen for the final model.
+
+For reasons of space, I do not present the matrix of accuracy values. However, the code for obtaining it is presented below.
+
+```{r}
+#c.cost <- c(0.04, 0.08, 0.16, 0.32, 0.64, 1.28,2.56,5.12,10.24,20.48,40.96)
+#s.gamma <- 1/c(2,5,10,20,30,40,50,60,70,80,90,100,150,200)
+#sel.Rs <- matrix(0,length(c.cost),length(s.gamma))
+
+#for(i in 1:length(c.cost))
+#{
+#  for(j in 1:length(s.gamma))
+#  {
+#    mIJ <- ksvm(classe ~.,data=train.set,kernel = "rbfdot",kpar=list(sigma=s.gamma[j]),C=c.cost[i])
+#    phatIJ <- predict(mIJ,valid.set)
+#    aIJ <- confusionMatrix(data = phatIJ,reference = valid.set$classe)
+#    sel.Rs[i,j] <- aIJ$overall[1]
+#  }
+#}
+
+#rm(i,j,mIJ,phatIJ,aIJ)
+#Ind <- which(sel.Rs == max(sel.Rs),arr.ind = TRUE)
+```
+
+The values that give the best performance (**cross-validation accuracy of 99.5%**) are `C = 40.96` and `sigma=1/20`. These values are used to fit the final model, which will be the one used to make the predictions for the testing dataset.
+
+**NOTE:** I am defining again the same subset of features but without `classe`, since the testing set does not have it.
+
+```{r}
+keep.var <- c("user_name","raw_timestamp_part_1","raw_timestamp_part_2","num_window","roll_belt","pitch_belt","yaw_belt","total_accel_belt","gyros_belt_x","gyros_belt_y","gyros_belt_z","accel_belt_x","accel_belt_y","accel_belt_z","magnet_belt_x","magnet_belt_y","magnet_belt_z","roll_arm","pitch_arm","yaw_arm","total_accel_arm","gyros_arm_x","gyros_arm_y","gyros_arm_z","accel_arm_x","accel_arm_y","accel_arm_z","magnet_arm_x","magnet_arm_y","magnet_arm_z","roll_dumbbell","pitch_dumbbell","yaw_dumbbell","total_accel_dumbbell","gyros_dumbbell_x","gyros_dumbbell_y","gyros_dumbbell_z","accel_dumbbell_x","accel_dumbbell_y","accel_dumbbell_z","magnet_dumbbell_x","magnet_dumbbell_y","magnet_dumbbell_z","roll_forearm","pitch_forearm","yaw_forearm","total_accel_forearm","gyros_forearm_x","gyros_forearm_y","gyros_forearm_z","accel_forearm_x","accel_forearm_y","accel_forearm_z","magnet_forearm_x","magnet_forearm_y","magnet_forearm_z")
+final.model <- ksvm(classe ~.,data=train.set[,c(keep.var,"classe")],kernel = "rbfdot",kpar=list(sigma=1/20),C=40.96)
+final.phat <- predict(final.model,pml.testing[,keep.var])
+```
+
+Given that the ground truth is not available, I am not able to provide an estimate of accuracy or any other measure of performance for the **testing set**. Nonetheless, the procedure was correctly applied and I am confident that the results will be highly accurate.
+
+**REFERENCES.**
+[1] Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. 
+
+[2] Kuhn, Max, and Kjell Johnson. Applied predictive modeling. New York: Springer, 2013.
